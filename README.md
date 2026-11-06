@@ -35,7 +35,17 @@ The drift wasn't wrong arithmetic. It was something lost, and something new.
 - **Checked chain:** it fixed 6 rewrites after one nudge and refused 1. Its final note passed the audit against the original note.
 - **False alarms:** the second model flagged an unchanged line twice, which cost one refusal. The must-keep check counted the softened floor as dropped, because the note no longer said Friday is under the cap.
 
-Drift varies a lot from run to run, so one run proves little about how often it happens. The next step is many runs per setting, with false alarms counted alongside catches.
+Drift varies a lot from run to run, so one run proves little about how often it happens.
+
+**Ten runs** (November 6, Opus 5.5 writing and translating, Sonnet 5.5 judging; `./run_batch.sh 10 20`, scored by `lintegrity/score_batch.py`):
+
+- **Final notes:** clean in all 10 runs, in both chains. On a short note full of numbers, Opus 5.5 wobbles mid-chain in most runs but corrects itself.
+- **Real drift:** one run. A firm promise ("at least $24.55 will be left") became a condition ("if Friday is the last day with spend") from rewrite 1 to 18. The check flagged it every round.
+- **False alarms:** 43 of the 52 flags, sorted by hand.
+  - **24 "dropped" flags on a fact that was still there.** The note didn't say the cap applies to Friday, and the check assumed nothing.
+  - **19 "new" flags on rewording.** The second model treated a reworded next step as new.
+
+**What this means:** the check catches real drift, but it's far too noisy to use yet. Two fixes come next. First, give the check the background rules that hold everywhere. Second, have the second model flag only new meaning, not new wording. After that, test on longer, messier notes, where drift is common enough to measure.
 
 ## What it can't do
 

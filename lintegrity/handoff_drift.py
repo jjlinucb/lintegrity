@@ -13,12 +13,22 @@ Claims Z3 can't express (plans, names, feelings) are marked "can't check", never
 
 Run: pip install z3-solver; python3 z3-handoff-drift.py [rounds]   (calls `claude -p`)
 """
-import json, subprocess, sys
-from concurrent.futures import ThreadPoolExecutor
+import json, os, subprocess, sys
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from z3 import Solver, And, Not, Real, parse_smt2_string, unsat
 
 ROUNDS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 20
-MODEL = "claude-opus-5-5"
+MODEL = "claude-opus-5-5"            # writes the handoffs: the model under test
+# Translating claims into logic is mechanical; a cheaper model keeps a 10-run batch affordable.
+TRANSLATE_MODEL = os.environ.get("LINTEGRITY_TRANSLATE_MODEL", MODEL)
+# --run NAME keeps each run's files apart, under results/NAME/.
+RUN = sys.argv[sys.argv.index("--run") + 1] if "--run" in sys.argv else "latest"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results", RUN)
+os.makedirs(OUT, exist_ok=True)
+
+
+def out(name):
+    return os.path.join(OUT, name)
 
 FACTS = """
 (declare-const budget Real) (declare-const cap Real) (declare-const refund Real)
@@ -98,7 +108,7 @@ def ask_json(prompt, model=MODEL, tries=3):
         try:
             return parse(raw)
         except Exception:
-            with open(__file__.replace(".py", ".bad-replies.log"), "a") as f:
+            with open(out("bad-replies.log"), "a") as f:
                 f.write(f"--- try {i + 1}, {model}\nPROMPT TAIL: {prompt[-300:]!r}\nREPLY: {raw[:1500]!r}\n")
             if i == tries - 1:
                 raise
@@ -112,7 +122,7 @@ def check(note, reference):
     """Check a note's claims against the source facts, what it dropped, and what it added
     that the reference (the last trusted note) never said. Returns (agree, rows)."""
     with ThreadPoolExecutor(2) as ex:
-        t1, t2 = ex.map(lambda p: ask_json(p + note), TRANSLATE)
+        t1, t2 = ex.map(lambda p: ask_json(p + note, model=TRANSLATE_MODEL), TRANSLATE)
     facts = to_z3(FACTS.split(DECLS, 1)[1])
     c1 = And(*[to_z3(i["smt"]) for i in t1 if i["smt"].strip()] or [True])
     c2 = And(*[to_z3(i["smt"]) for i in t2 if i["smt"].strip()] or [True])
@@ -180,7 +190,7 @@ def bad(rows):
 def run_chain(gated):
     name = "gated" if gated else "plain"
     note, log = START, []
-    partial = __file__.replace(".py", f".{name}.partial.json")
+    partial = out(f"{name}.partial.json")
     if "--resume" in sys.argv:
         try:
             log = json.load(open(partial))
@@ -212,19 +222,21 @@ def run_chain(gated):
         log.append(entry)
         note = new
         nb = len(bad(entry["rows"]))
-        json.dump(log, open(__file__.replace(".py", f".{name}.partial.json"), "w"), indent=1)
+        json.dump(log, open(out(f"{name}.partial.json"), "w"), indent=1)
         print(f"[{name}] round {r}: {nb} bad, agree={entry['agree']}, {entry['action']}", flush=True)
     return {"chain": name, "rounds": log, "final_note": note}
 
 
 if __name__ == "__main__":
-    with ThreadPoolExecutor(2) as ex:
+    # Separate processes, not threads: Z3's Python API is not thread-safe, and two chains
+    # solving at once in one process crashed Python with SIGBUS (2026-11-06).
+    with ProcessPoolExecutor(2) as ex:
         results = list(ex.map(run_chain, (False, True)))
     # Final audit of both end notes against the ORIGINAL note, the real source of truth.
     for c in results:
         c["audit_vs_start"] = check(c["final_note"], START)[1]
     json.dump({"start": START, "chains": results},
-              open(__file__.replace(".py", ".results.json"), "w"), indent=1)
+              open(out("results.json"), "w"), indent=1)
     for c in results:
         print(f"\n=== {c['chain']} chain, final note ===\n{c['final_note']}")
         for row in c["audit_vs_start"]:
