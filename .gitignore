@@ -4,3 +4,4 @@ __pycache__/
 *.results*.json
 *.partial.json
 .venv/
+*.bad-replies.log

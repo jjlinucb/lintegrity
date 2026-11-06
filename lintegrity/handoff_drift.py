@@ -17,7 +17,7 @@ import json, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor
 from z3 import Solver, And, Not, Real, parse_smt2_string, unsat
 
-ROUNDS = int(sys.argv[1]) if len(sys.argv) > 1 else 20
+ROUNDS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 20
 MODEL = "claude-opus-5-5"
 
 FACTS = """
@@ -91,6 +91,19 @@ def parse(txt):
     return json.loads(txt[txt.find("["): txt.rfind("]") + 1])
 
 
+def ask_json(prompt, model=MODEL, tries=3):
+    """claude -p sometimes comes back empty; ask again before giving up."""
+    for i in range(tries):
+        raw = claude(prompt, model=model)
+        try:
+            return parse(raw)
+        except Exception:
+            with open(__file__.replace(".py", ".bad-replies.log"), "a") as f:
+                f.write(f"--- try {i + 1}, {model}\nPROMPT TAIL: {prompt[-300:]!r}\nREPLY: {raw[:1500]!r}\n")
+            if i == tries - 1:
+                raise
+
+
 def to_z3(smt):
     return And(*parse_smt2_string(DECLS + smt))
 
@@ -99,7 +112,7 @@ def check(note, reference):
     """Check a note's claims against the source facts, what it dropped, and what it added
     that the reference (the last trusted note) never said. Returns (agree, rows)."""
     with ThreadPoolExecutor(2) as ex:
-        t1, t2 = ex.map(lambda p: parse(claude(p + note)), TRANSLATE)
+        t1, t2 = ex.map(lambda p: ask_json(p + note), TRANSLATE)
     facts = to_z3(FACTS.split(DECLS, 1)[1])
     c1 = And(*[to_z3(i["smt"]) for i in t1 if i["smt"].strip()] or [True])
     c2 = And(*[to_z3(i["smt"]) for i in t2 if i["smt"].strip()] or [True])
@@ -142,8 +155,8 @@ def check(note, reference):
     if loose:
         listing = "\n".join(f"{i + 1}. {r['claim']}" for i, r in enumerate(loose))
         try:
-            new_ones = parse(claude(JUDGE + "REFERENCE:\n" + reference + "\n\nSTATEMENTS:\n" + listing,
-                                    model=JUDGE_MODEL))
+            new_ones = ask_json(JUDGE + "REFERENCE:\n" + reference + "\n\nSTATEMENTS:\n" + listing,
+                                model=JUDGE_MODEL)
         except Exception:
             new_ones = []
         for n in new_ones:
@@ -167,7 +180,16 @@ def bad(rows):
 def run_chain(gated):
     name = "gated" if gated else "plain"
     note, log = START, []
-    for r in range(1, ROUNDS + 1):
+    partial = __file__.replace(".py", f".{name}.partial.json")
+    if "--resume" in sys.argv:
+        try:
+            log = json.load(open(partial))
+        except FileNotFoundError:
+            log = []
+        for e in log:   # replay: a refused round keeps the note before it
+            if not e["action"].startswith("refused"):
+                note = e["note"]
+    for r in range(len(log) + 1, ROUNDS + 1):
         new = claude(REWRITE + note)
         agree, rows = check(new, note)
         entry = {"round": r, "note": new, "agree": agree, "rows": rows, "action": "kept"}

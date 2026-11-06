@@ -29,6 +29,14 @@ A note that fails gets one try at a fix, with the problems named. If it still fa
 
 The drift wasn't wrong arithmetic. It was something lost, and something new.
 
+**A second 20-handoff run** used version 2 of the check. That version proves the number inside a reason ("Wednesday was $0 because the API was down") and asks a second model whether each claim was in the last trusted note.
+
+- **Plain chain:** it drifted less. It made up no worry this time, but the guaranteed floor softened from "at least $24.55 will be left" to "even at the cap, $24.55 would be left". It stayed that way from rewrite 6 to the end.
+- **Checked chain:** it fixed 6 rewrites after one nudge and refused 1. Its final note passed the audit against the original note.
+- **False alarms:** the second model flagged an unchanged line twice, which cost one refusal. The must-keep check counted the softened floor as dropped, because the note no longer said Friday is under the cap.
+
+Drift varies a lot from run to run, so one run proves little about how often it happens. The next step is many runs per setting, with false alarms counted alongside catches.
+
 ## What it can't do
 
 - **It can't make a model stop guessing.** It only stops guesses from being saved or shown.
