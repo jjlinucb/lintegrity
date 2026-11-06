@@ -20,5 +20,7 @@ Then move `results/` to `results-2026-11-06/` and run the batch again. Without c
 - turn the checker into a small library, `check(note, facts, must_keep, last_note)`;
 - try it on a second kind of facts, dates and schedules.
 
+**Before the rerun (added 2026-11-06): find out why the batch used so many tokens.** Guess to check first: each round makes 4 to 8 `claude -p` calls (a rewrite, two Opus translations and a Sonnet judge, and twice that when a fix round runs). That comes to roughly 1,000 to 1,600 calls for 10 runs. Each call starts a full Claude Code session, which loads the system prompt, every CLAUDE.md up the folder tree, hooks and the skill list, likely tens of thousands of tokens before the short task. To confirm, run one call with `--output-format json` and read its usage. Options: call the API directly with only the task prompt; use `claude -p` with a bare system prompt and no setting sources; cache the shared part of the prompt; or cut the translations to one per round and add the second only when Z3 finds a problem.
+
 ## Open questions
 - (2026-11-05) Which real app gets Lintegrity first: an assistant's morning summary and memory, or an AI spending cap?
