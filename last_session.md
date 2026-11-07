@@ -13,5 +13,7 @@ All calls are lean (`LEAN` flags in `handoff_drift.py`: about 1,000 tokens of se
 ## Pick up here
 Make the check notice when the same drift keeps coming back (the weekend question returned 11 times in a row in two runs), and report "the source note is unclear here" instead of fixing it every round. Then test on a longer, messier note (dates, people, several projects), and turn the checker into a small library: `check(note, facts, must_keep, last_note)`.
 
+Use cases are listed in `USE-CASES.md`. The first candidates in John's own apps are kept outside this public repo, in the vault ideas list (item 14).
+
 ## Open questions
 - (2026-11-05) Which real app gets Lintegrity first: an assistant's morning summary and memory, or an AI spending cap? Waiting, by choice (2026-11-06).

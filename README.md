@@ -85,4 +85,6 @@ The claim checks call the [Claude Code](https://claude.com/claude-code) CLI (`cl
 
 This is an early prototype, started November 2026.
 
+Where else it fits: [USE-CASES.md](USE-CASES.md).
+
 MIT licensed.
