@@ -10,6 +10,8 @@ The afternoon batch of 2026-11-06 used the fixed check: without it, the note dri
 
 All calls are lean (`LEAN` flags in `handoff_drift.py`: about 1,000 tokens of setup instead of 48,000), so a batch costs roughly 1/15 of the morning's. Results are in local `results/` (afternoon) and `results-2026-11-06-v2/` (morning); both are ignored by git. Run `lintegrity/selftest.py` before any batch. Z3 runs in processes, not threads (it isn't thread-safe). To set up: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, then run with `PYTHON=.venv/bin/python`.
 
+A Jev version of the meaning check now runs on every last_session.md write, as a private Claude Code hook (`session-check` in the john-jev-lab repo): about 0.5 s and $0.00004 per check; 2 of 31 real wrap-ups fired, 6 of 6 planted drifts caught. The README has a public summary.
+
 ## Pick up here
 Make the check notice when the same drift keeps coming back (the weekend question returned 11 times in a row in two runs), and report "the source note is unclear here" instead of fixing it every round. Then test on a longer, messier note (dates, people, several projects), and turn the checker into a small library: `check(note, facts, must_keep, last_note)`.
 

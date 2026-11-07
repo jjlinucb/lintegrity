@@ -63,6 +63,14 @@ The morning's "10 of 10 clean" was the old check missing drift that had no numbe
 
 **Next:** report a gap in the source instead of fixing the same drift every round; test on longer, messier notes; and turn the checker into a small library an app calls before it saves memory.
 
+## In daily use: checking an AI's own handoff notes
+
+The same check runs as a Claude Code hook on every write of a project's `last_session.md`, the note each chat leaves for the next. It uses [Jev](https://docs.typesafe.ai), a fast model that returns probabilities instead of text. One batched request asks whether each changed sentence alters what the last trusted note said, and whether an open question that vanished was settled. Code catches a question re-dated to look new. New progress passes. A flagged note goes back to Claude once, with the problems named.
+
+- **Speed and cost:** about 0.5 s and 900 input tokens per check, roughly $0.00004. The `claude -p` version took about 20 s and $0.05.
+- **Accuracy:** on 31 real wrap-ups from four projects it fired twice, and both were real changes in fact worth a second look. It caught 6 of 6 planted drifts: a fact made a doubt, an added condition, two made-up worries, a dropped open question, and it let legit progress pass.
+- **Not a proof:** no Z3 here. Handoff notes are mostly words, so this half of Lintegrity is the meaning check.
+
 ## What it can't do
 
 - **It can't make a model stop guessing.** It only stops guesses from being saved or shown.
