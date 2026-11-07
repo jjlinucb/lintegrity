@@ -13,10 +13,11 @@ Claims Z3 can't express (plans, names, feelings) are marked "can't check", never
 
 Run: pip install z3-solver; python3 z3-handoff-drift.py [rounds]   (calls `claude -p`)
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from z3 import Solver, And, Not, Real, parse_smt2_string, unsat
 
+CHECK_EVERY = 5   # the plain chain is only measured, so check it every 5th rewrite
 ROUNDS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 20
 MODEL = "claude-opus-5-5"            # writes the handoffs: the model under test
 # Translating claims into logic is mechanical; a cheaper model keeps a 10-run batch affordable.
@@ -55,6 +56,16 @@ START = """Handoff note, AI budget project, week of Nov 2.
 - No day has gone over the cap.
 - Next step: the team lead wants a chart of daily spend for Sunday's review."""
 
+# Rules that hold everywhere, which a note may lean on without saying them: the cap binds
+# Friday too, and the totals mean what they say. Without these, "at least $24.55 left after
+# Friday" read as dropped whenever the note didn't also say "Friday is under the cap".
+RULES = """
+(assert (and (>= fri 0.0) (<= fri cap)))
+(assert (= spent_now (- (+ mon tue wed thu) refund)))
+(assert (= left_now (- budget spent_now)))
+(assert (= left_end (- left_now fri)))
+"""
+
 # Facts every handoff must still carry (the note's own claims must imply each one).
 MUST_KEEP = {
     "budget is $50": "(assert (= budget 50.0))",
@@ -85,15 +96,25 @@ TRANSLATE = [
 
 
 JUDGE_MODEL = "claude-sonnet-5-5"   # a second, different model for the "is this new?" check
-JUDGE = ("REFERENCE is the last trusted handoff note. For each numbered STATEMENT, decide if the "
-         "REFERENCE says it or directly implies it (rewording is fine; a new worry, doubt, plan, "
-         "condition, reason or changed meaning is NOT fine). Reply with JSON only: a list of the "
-         "numbers of statements that are NOT supported, e.g. [2, 5], or [] if all are supported.\n\n")
+JUDGE = ("ORIGINAL and LAST are trusted handoff notes. For each numbered STATEMENT, flag it only if "
+         "it changes MEANING compared with both: a new worry or doubt, a new plan or person, a new "
+         "or dropped condition (an 'if' added or removed), a new reason, or a different fact. "
+         "Rewording, shortening, reordering, a restated next step and anything either note already "
+         "says are all fine and must NOT be flagged. When unsure, do not flag. Reply with JSON only: "
+         "a list of the numbers of flagged statements, e.g. [2], or [] if none.\n\n")
+
+
+# Lean calls: a plain `claude -p` loads the whole Claude Code setup (system prompt, every
+# CLAUDE.md, tools, MCP servers), about 48,000 tokens, before a 5-word task. These flags cut
+# that to about 1,000 (measured 2026-11-06: $0.19 vs $0.008 per call at API prices).
+LEAN = ["--system-prompt", "You are a careful assistant. Follow the instructions exactly.",
+        "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+        "--exclude-dynamic-system-prompt-sections", "--no-session-persistence"]
 
 
 def claude(prompt, model=MODEL):
-    out = subprocess.run(["claude", "-p", "--model", model, prompt],
-                         capture_output=True, text=True, timeout=300)
+    out = subprocess.run(["claude", "-p", "--model", model, *LEAN, prompt],
+                         capture_output=True, text=True, timeout=300, cwd="/tmp")
     return out.stdout.strip()
 
 
@@ -118,18 +139,10 @@ def to_z3(smt):
     return And(*parse_smt2_string(DECLS + smt))
 
 
-def check(note, reference):
-    """Check a note's claims against the source facts, what it dropped, and what it added
-    that the reference (the last trusted note) never said. Returns (agree, rows)."""
-    with ThreadPoolExecutor(2) as ex:
-        t1, t2 = ex.map(lambda p: ask_json(p + note, model=TRANSLATE_MODEL), TRANSLATE)
-    facts = to_z3(FACTS.split(DECLS, 1)[1])
-    c1 = And(*[to_z3(i["smt"]) for i in t1 if i["smt"].strip()] or [True])
-    c2 = And(*[to_z3(i["smt"]) for i in t2 if i["smt"].strip()] or [True])
-    s = Solver(); s.add(facts, Not(c1 == c2))
-    agree = s.check() == unsat
+def z3_rows(t, facts, rules):
+    """Z3 verdicts for one translation: each claim against the facts, then the must-keeps."""
     rows = []
-    for it in t1:
+    for it in t:
         if not it["smt"].strip():
             rows.append({"claim": it["claim"], "verdict": "can't check", "why": "outside the rules"})
             continue
@@ -154,25 +167,56 @@ def check(note, reference):
     for row in rows:
         if row["verdict"] == "can't check" and "$" in row["claim"]:
             row["verdict"], row["why"] = "unchecked number", "has a number the rules can't check"
-    # What did the note drop? Its own claims (without the source facts) must imply each must-keep.
-    said = And(*[to_z3(i["smt"]) for i in t1 if i["smt"].strip() and _ok(i["smt"])] or [True])
+    # What did the note drop? Its own claims plus the background rules (not the source facts)
+    # must imply each must-keep.
+    said = And(*[to_z3(i["smt"]) for i in t if i["smt"].strip() and _ok(i["smt"])] or [True])
     for name, smt in MUST_KEEP.items():
-        s = Solver(); s.add(said, Not(to_z3(smt)))
+        s = Solver(); s.add(said, rules, Not(to_z3(smt)))
         if s.check() != unsat:
             rows.append({"claim": f"(dropped) {name}", "verdict": "dropped", "why": "the note no longer says this"})
+    return rows
+
+
+def _key(r):
+    return r["claim"] if r["verdict"] == "dropped" else r["verdict"]
+
+
+def check(note, reference):
+    """Check a note: numbers against the source facts, dropped must-keeps, and new meaning the
+    trusted notes never had. One reading of the note into logic by default; a second, differently
+    worded reading only when the first finds a problem, and a Z3 flag stands only if both
+    readings raise it. Returns (agree, rows)."""
+    facts, rules = to_z3(FACTS.split(DECLS, 1)[1]), to_z3(RULES)
+    t1 = ask_json(TRANSLATE[0] + note, model=TRANSLATE_MODEL)
+    rows = z3_rows(t1, facts, rules)
+    agree = True
+    if any(r["verdict"] in Z3_BAD for r in rows):
+        t2 = ask_json(TRANSLATE[1] + note, model=TRANSLATE_MODEL)
+        keys2 = {_key(r) for r in z3_rows(t2, facts, rules) if r["verdict"] in Z3_BAD}
+        for r in rows:
+            if r["verdict"] in Z3_BAD and _key(r) not in keys2:
+                r["why"] = f"first reading said {r['verdict']}; the second reading disagreed"
+                r["verdict"] = "cleared"
+        c1 = And(*[to_z3(i["smt"]) for i in t1 if i["smt"].strip() and _ok(i["smt"])] or [True])
+        c2 = And(*[to_z3(i["smt"]) for i in t2 if i["smt"].strip() and _ok(i["smt"])] or [True])
+        s = Solver(); s.add(facts, Not(c1 == c2))
+        agree = s.check() == unsat
     # Words Z3 can't check: ask a second model whether the last trusted note said them.
-    loose = [r for r in rows if r["verdict"] == "can't check"]
-    if loose:
-        listing = "\n".join(f"{i + 1}. {r['claim']}" for i, r in enumerate(loose))
+    # Meaning check on the note's own sentences, word for word. Sentences, not the translated
+    # claims: a translation can quietly drop an added condition ("IF Friday is the last day,
+    # at least $24.55 is left") while Z3 still proves the number.
+    sentences = [x.strip(" -*") for x in re.split(r"\n|(?<=[.!?])\s+", note) if len(x.strip(" -*")) > 3]
+    if sentences:
+        listing = "\n".join(f"{i + 1}. {x}" for i, x in enumerate(sentences))
         try:
-            new_ones = ask_json(JUDGE + "REFERENCE:\n" + reference + "\n\nSTATEMENTS:\n" + listing,
-                                model=JUDGE_MODEL)
+            new_ones = ask_json(JUDGE + "ORIGINAL:\n" + START + "\n\nLAST:\n" + reference
+                                + "\n\nSTATEMENTS:\n" + listing, model=JUDGE_MODEL)
         except Exception:
             new_ones = []
         for n in new_ones:
-            if isinstance(n, int) and 1 <= n <= len(loose):
-                loose[n - 1]["verdict"] = "new"
-                loose[n - 1]["why"] = "not in the last trusted note"
+            if isinstance(n, int) and 1 <= n <= len(sentences):
+                rows.append({"claim": sentences[n - 1], "verdict": "new",
+                             "why": "changes the meaning of the trusted notes"})
     return agree, rows
 
 
@@ -181,6 +225,9 @@ def _ok(smt):
         to_z3(smt); return True
     except Exception:
         return False
+
+
+Z3_BAD = ("false", "not proved", "unchecked number", "dropped")
 
 
 def bad(rows):
@@ -201,19 +248,20 @@ def run_chain(gated):
                 note = e["note"]
     for r in range(len(log) + 1, ROUNDS + 1):
         new = claude(REWRITE + note)
-        agree, rows = check(new, note)
+        if gated or r % CHECK_EVERY == 0:
+            agree, rows = check(new, note)
+        else:
+            agree, rows = True, [{"claim": "(not checked this round)", "verdict": "skipped", "why": ""}]
         entry = {"round": r, "note": new, "agree": agree, "rows": rows, "action": "kept"}
-        if gated and (bad(rows) or not agree):
+        if gated and bad(rows):
             fix = ("A checker found problems with your note (wrong, unsupported, a number it can't check, a key fact you dropped, or something new the last note never said):\n"
                    + "\n".join(f"- {b['claim']} ({b['why']})" for b in bad(rows))
-                   + ("\n- (two independent readings of the note disagreed; make the numbers unambiguous)"
-                      if not agree else "")
                    + "\nRewrite the note with those fixed: correct or remove wrong or new ones, put dropped facts back from the last checked note. Add nothing the last checked note doesn't say. Reply with the new note only.\n\n"
                    + "LAST CHECKED NOTE:\n" + note + "\n\nYOUR NOTE:\n" + new)
             new2 = claude(fix)
             agree2, rows2 = check(new2, note)
             entry.update(first_try_bad=bad(rows), note=new2, agree=agree2, rows=rows2)
-            if bad(rows2) or not agree2:
+            if bad(rows2):
                 entry["action"] = "refused, kept last checked note"
                 new = note
             else:

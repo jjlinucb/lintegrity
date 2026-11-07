@@ -37,15 +37,31 @@ The drift wasn't wrong arithmetic. It was something lost, and something new.
 
 Drift varies a lot from run to run, so one run proves little about how often it happens.
 
-**Ten runs** (November 6, Opus 5.5 writing and translating, Sonnet 5.5 judging; `./run_batch.sh 10 20`, scored by `lintegrity/score_batch.py`):
+**Ten runs, first version of the check** (November 6, morning; Opus 5.5 writing and translating, Sonnet 5.5 judging; `./run_batch.sh 10 20`, scored by `lintegrity/score_batch.py`):
 
 - **Final notes:** clean in all 10 runs, in both chains. On a short note full of numbers, Opus 5.5 wobbles mid-chain in most runs but corrects itself.
 - **Real drift:** one run. A firm promise ("at least $24.55 will be left") became a condition ("if Friday is the last day with spend") from rewrite 1 to 18. The check flagged it every round.
-- **False alarms:** 43 of the 52 flags, sorted by hand.
+- **False alarms:** 43 of the 52 flags, sorted by hand. Both causes were fixed for the afternoon runs:
   - **24 "dropped" flags on a fact that was still there.** The note didn't say the cap applies to Friday, and the check assumed nothing.
   - **19 "new" flags on rewording.** The second model treated a reworded next step as new.
 
-**What this means:** the check catches real drift, but it's far too noisy to use yet. Two fixes come next. First, give the check the background rules that hold everywhere. Second, have the second model flag only new meaning, not new wording. After that, test on longer, messier notes, where drift is common enough to measure.
+**Ten runs with the fixed check** (November 6, afternoon). This version gives the must-keep check the background rules, so a cap binds every day. The second model reads the note's own sentences against both the original and the last note, and flags only changes in meaning. Every call runs lean. `lintegrity/selftest.py` passed all 4 known cases before the batch.
+
+- **Without the check:** the note drifted in all 10 runs. Across the runs, four kinds of drift showed up:
+  - a firm promise grew an "if" ("at least $24.55, if Friday is the last day");
+  - a weekend got made up ("$8.55 left after Sunday");
+  - a sure fact became a doubt ("possible $2 refund, not yet verified");
+  - in 2 runs a number went wrong ("$30.55 left", when $32.55 is left).
+- **With the check:** the note ended clean in all 10 runs, after 40 fixes and 0 refusals.
+- **Flags:** 115 in all. Reading them by hand, I found no clear false alarms; each one was a real change in meaning. Many are the same drift coming back round after round.
+
+The morning's "10 of 10 clean" was the old check missing drift that had no number in it.
+
+**Drift that keeps coming back points at a gap in the source.** The original note says "at the end of the week" but counts only Friday, so whether the weekend counts is open. Claude raised the weekend in every run, and in two runs it raised it 11 times in a row. Next: when the same drift returns again and again, report "the source note is unclear here" instead of fixing it every round.
+
+**Cost:** a plain `claude -p` call loads the whole Claude Code setup, about 48,000 tokens, before a short task: $0.19 per call at API prices. Lean flags cut that to about 1,000 tokens, or $0.008 per call. Together with fewer calls (one reading of each note, a second only when the first flags something, and the plain chain checked every 5th rewrite), this batch cost roughly 1/15 of the morning's.
+
+**Next:** report a gap in the source instead of fixing the same drift every round; test on longer, messier notes; and turn the checker into a small library an app calls before it saves memory.
 
 ## What it can't do
 
@@ -58,13 +74,15 @@ Drift varies a lot from run to run, so one run proves little about how often it 
 ```bash
 pip install -r requirements.txt
 python3 lintegrity/claim_and_pipe_check.py      # pipe proof + one-answer check (about 40 s)
-python3 lintegrity/handoff_drift.py 20          # plain vs checked handoffs (about 30 min)
+python3 lintegrity/selftest.py                  # 4 known cases, about 1.5 min
+python3 lintegrity/handoff_drift.py 20          # one plain vs checked run (about 15 min)
+./run_batch.sh 10 20                            # 10 runs, two at a time, then scored (about 75 min)
 ```
 
 The claim checks call the [Claude Code](https://claude.com/claude-code) CLI (`claude -p`), so you need it installed and signed in. Add `--no-claude` to the first script to reuse saved translations.
 
 ## Status
 
-This is an early prototype, started November 2026. Next: turn the checker into a small library an app calls before it saves memory, and try it on dates and schedules.
+This is an early prototype, started November 2026.
 
 MIT licensed.

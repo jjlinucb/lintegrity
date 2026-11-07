@@ -4,23 +4,14 @@
 **Status:** active
 
 ## Where things stand
-Lintegrity checks an AI's handoff notes before the next chat reads them. Z3 proves the numbers, a must-keep list catches dropped facts, and a second model (Sonnet 5.5) flags new claims. A pipe proof shows that no made-up claim reaches the screen or memory. The 10-run batch on 2026-11-06 (`./run_batch.sh 10 20`, results in the README and local `results/`) gave:
-- final notes clean 10/10 in both chains;
-- real drift in 1 run (a promise turned into an "if"), and it was caught;
-- 43 of 52 flags were false alarms: 24 "dropped" flags where the note relied on the unstated rule that the cap applies to every day, and 19 "new" flags on plain rewording.
+Lintegrity checks an AI's handoff notes before the next chat reads them. Z3 proves the numbers, a must-keep list (with background rules) catches dropped facts, and Sonnet 5.5 reads the note's own sentences against the original and the last note, flagging changes in meaning only. A pipe proof shows that no made-up claim reaches the screen or memory.
 
-Chains run as separate processes, because Z3's Python API isn't thread-safe; calling it from two threads crashed Python twice. To set up a fresh virtual environment, run `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, then `PYTHON=.venv/bin/python ./run_batch.sh 10 20`.
+The afternoon batch of 2026-11-06 used the fixed check: without it, the note drifted in 10 of 10 runs; with it, the note ended clean in 10 of 10 (40 fixes, 0 refusals, no clear false alarms in 115 flags). The drift came in four kinds: an "if" added to a promise, a made-up weekend, a fact turned into a doubt, and a wrong number. The morning batch's false alarms (43 of 52) and its blindness to drift with no number in it are both fixed.
+
+All calls are lean (`LEAN` flags in `handoff_drift.py`: about 1,000 tokens of setup instead of 48,000), so a batch costs roughly 1/15 of the morning's. Results are in local `results/` (afternoon) and `results-2026-11-06-v2/` (morning); both are ignored by git. Run `lintegrity/selftest.py` before any batch. Z3 runs in processes, not threads (it isn't thread-safe). To set up: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, then run with `PYTHON=.venv/bin/python`.
 
 ## Pick up here
-Planned for 2026-11-06 at 3 PM, once credits refresh. First make two fixes in `lintegrity/handoff_drift.py`, then rerun 10:
-1. Give the must-keep check background rules that hold everywhere: each day <= cap, plus the definitions of spent_now, left_now and left_end.
-2. Reword the JUDGE prompt so it flags new meaning only, never rewording, restated next steps or facts that were already in the original note.
-Then move `results/` to `results-2026-11-06/` and run the batch again. Without crashes it takes about 1 hour. Target: fewer than 1 in 5 flags false, with run 7's kind of drift still caught. After that:
-- a harder test: a longer, messier note (dates, people, several projects);
-- turn the checker into a small library, `check(note, facts, must_keep, last_note)`;
-- try it on a second kind of facts, dates and schedules.
-
-**Before the rerun (added 2026-11-06): find out why the batch used so many tokens.** Guess to check first: each round makes 4 to 8 `claude -p` calls (a rewrite, two Opus translations and a Sonnet judge, and twice that when a fix round runs). That comes to roughly 1,000 to 1,600 calls for 10 runs. Each call starts a full Claude Code session, which loads the system prompt, every CLAUDE.md up the folder tree, hooks and the skill list, likely tens of thousands of tokens before the short task. To confirm, run one call with `--output-format json` and read its usage. Options: call the API directly with only the task prompt; use `claude -p` with a bare system prompt and no setting sources; cache the shared part of the prompt; or cut the translations to one per round and add the second only when Z3 finds a problem.
+Make the check notice when the same drift keeps coming back (the weekend question returned 11 times in a row in two runs), and report "the source note is unclear here" instead of fixing it every round. Then test on a longer, messier note (dates, people, several projects), and turn the checker into a small library: `check(note, facts, must_keep, last_note)`.
 
 ## Open questions
-- (2026-11-05) Which real app gets Lintegrity first: an assistant's morning summary and memory, or an AI spending cap?
+- (2026-11-05) Which real app gets Lintegrity first: an assistant's morning summary and memory, or an AI spending cap? Waiting, by choice (2026-11-06).
