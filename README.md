@@ -13,6 +13,15 @@ Lintegrity checks every note before the next chat reads it.
 
 A note that fails gets one try at a fix, with the problems named. If it still fails, it is refused, and the last checked note carries on.
 
+## Evidence (November 10)
+
+A planned test of the whole idea, with 68 cases in six tiers, rewrite chains, and a proof. The full write-up is in [evidence/EVIDENCE.md](evidence/EVIDENCE.md).
+
+- **Both layers together** caught 47 of 47 planted drifts, with 0 false alarms on 21 safe edits.
+- **Z3 alone** caught 31 of 31 drifts that can be written as logic, each with a counterexample, and never flagged a true note. That includes 4 held-out arithmetic drifts that the judgement model missed every time.
+- **Proof by induction:** the gate never lets a flagged note become the trusted note, on any turn. The same proof shows how a fail-open design (accept on a checker error, or on a second write) leaks.
+- **Rewrite chains:** Haiku 5.5 rewrote a long note 10 times. Without the check, it lost a must-keep fact in 2 of 5 chains. With the check, it lost none, after 21 fixes and 0 refusals. Sonnet 5.5 didn't drift at all on the shorter note, and the check raised 0 false alarms across those 50 rewrites.
+
 ## What it found
 
 **One answer.** Claude Opus 5.5 answered a budget question, and all 8 of its claims were proved. A drifted summary planted for the test was caught twice: "Tuesday went over the cap" is false, and "at least $9.85 left after Thursday" is wrong if Thursday costs $0.50.

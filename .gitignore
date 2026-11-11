@@ -7,3 +7,7 @@ __pycache__/
 *.bad-replies.log
 results/
 results-*/
+evidence/results-*.json
+evidence/chains*/
+evidence/*.log
+evidence/translation-cache.json
