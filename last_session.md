@@ -19,8 +19,8 @@ On 2026-11-10 a planned evidence run (`evidence/`, write-up in `evidence/EVIDENC
 ## Pick up here
 Gaps the evidence run found:
 1. Done 2026-11-10: the session-check hook was rebuilt as the gate (PreToolUse; deny once, then refuse; an error counts as a flag; the user overrides with "accept the note"). `handoff_pipe_proof.py` proves it leak-free apart from that override.
-2. Chains drop the dates on open questions; the hook flags re-dated questions but not dropped dates.
-3. Jev compares each rewrite only with the last trusted note, so a detail can slip out one step at a time (the packing-list case). Also compare with the original, or the note from N rounds back.
+2. Done 2026-11-10: a dropped question date is flagged by code.
+3. Done 2026-11-10: the hook keeps the last 5 trusted versions and asks about standing facts lost since the oldest (advisory: asks once, never refuses). Re-run checked Haiku chains: 5 of 5 final notes clean against the original (1 of 5 before), dates kept in all 5.
 
 Earlier plan, still open: Make the check notice when the same drift keeps coming back (the weekend question returned 11 times in a row in two runs), and report "the source note is unclear here" instead of fixing it every round. Then test on a longer, messier note (dates, people, several projects), and turn the checker into a small library: `check(note, facts, must_keep, last_note)`.
 

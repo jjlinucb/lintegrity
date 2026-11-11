@@ -40,8 +40,11 @@ FIX = ("You rewrote a handoff note, and a checker found problems in your rewrite
        "PREVIOUS NOTE:\n{prev}\n\nYOUR REWRITE:\n{new}")
 
 
-def jev(before, after):
-    r = subprocess.run(["node", os.path.join(HERE, "jev_check.mjs")], input=json.dumps({"before": before, "after": after, "record": RECORD}),
+ADVISORY = "Lost a few rewrites back"   # the older-version check asks once, never refuses (as in the hook)
+
+
+def jev(before, after, anchor=None):
+    r = subprocess.run(["node", os.path.join(HERE, "jev_check.mjs")], input=json.dumps({"before": before, "after": after, "record": RECORD, "anchor": anchor}),
                        capture_output=True, text=True, timeout=120)
     try:
         out = json.loads(r.stdout)
@@ -79,6 +82,7 @@ def score(note):
 def run_chain(arm_i):
     arm, i = arm_i
     note, trusted, rounds = ORIGINAL, ORIGINAL, []
+    history = [ORIGINAL]   # trusted versions; the anchor is the oldest of the last 5, as in the hook
     for k in range(1, ROUNDS + 1):
         t = time.time()
         if arm == "plain":
@@ -86,20 +90,23 @@ def run_chain(arm_i):
             row = {"round": k, "note": note}
         else:
             cand = clean(claude(REWRITE + trusted, model=WRITER))
+            anchor = history[-5:][0] if len(history) >= 2 else None
             z, _ = z3_problems(cand)
-            probs = z + jev(trusted, cand)
+            probs = z + jev(trusted, cand, anchor)
             row = {"round": k, "first_try_problems": probs}
             if not probs:
                 trusted, row["outcome"] = cand, "passed"
             else:
                 fixed = clean(claude(FIX.format(p="\n".join(f"- {p}" for p in probs), prev=trusted, new=cand), model=WRITER))
                 z2, _ = z3_problems(fixed)
-                probs2 = z2 + jev(trusted, fixed)
+                probs2 = z2 + jev(trusted, fixed, anchor)
                 row["after_fix_problems"] = probs2
-                if not probs2:
+                if not [p for p in probs2 if not p.startswith(ADVISORY)]:
                     trusted, row["outcome"] = fixed, "fixed"
                 else:
                     row["outcome"] = "refused"
+            if history[-1] != trusted:
+                history.append(trusted)
             note = trusted
             row["note"] = note
         row["score"] = score(note)
@@ -111,7 +118,8 @@ def run_chain(arm_i):
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    jobs = [(a, i) for i in range(1, CHAINS + 1) for a in ("plain", "checked")]
+    arms = os.environ.get("LINTEGRITY_ARMS", "plain,checked").split(",")
+    jobs = [(a, i) for i in range(1, CHAINS + 1) for a in arms]
     with ProcessPoolExecutor(len(jobs)) as ex:
         for arm, i, s in ex.map(run_chain, jobs):
             print(f"{arm} {i}: lost {len(s['lost'])} {s['lost']}, contradictions {len(s['contradictions'])}, made-up {len(s['made_up'])}, changed {len(s['changed'])}, {s['chars']} chars", flush=True)

@@ -6,7 +6,7 @@ November 10, 2026. The plan was written before the tests ran: [TEST-PLAN.md](TES
 
 - **Proved:** a drifted note can never become the note the next chat trusts, as long as the checker flags it. Z3 proves this by induction over every turn ([handoff_pipe_proof.py](../lintegrity/handoff_pipe_proof.py)).
 - **Proved, for each note:** when a note contradicts a trusted fact, or stops guaranteeing one, Z3 shows it with a counterexample. This works for anything the facts can express as logic: counts, money, dates, times, owners, durations, per-person amounts. It held on every such drift in the suite (31 of 31), including 4 held-out ones written after the last change to the checker.
-- **In real AI rewrite chains:** Haiku 5.5, rewriting a long note 10 times with no check, lost a must-keep fact in 2 of 5 chains. With the check, it lost none (0 of 5), after 21 fixes and 0 refusals.
+- **In real AI rewrite chains:** Haiku 5.5, rewriting a long note 10 times with no check, lost a must-keep fact in 2 of 5 chains, and 4 of 5 final notes had drifted. With the check (after the two fixes below), all 5 final notes were clean against the original.
 - **Measured, not proved:** the judgement layer (Jev) covers what logic can't express, like made-up worries, made-up decisions, status changes and open questions. Both layers together caught 47 of 47 planted drifts, with 0 false alarms on 21 safe edits (4 of them true arithmetic statements).
 - **Two honest limits:**
   - **The proof is only as good as the translation into logic.** One case slipped through until a third reading was added to break ties between the two translations.
@@ -89,8 +89,20 @@ The setup: an AI rewrites the note again and again, each time about two thirds s
 | Rewrites passed / fixed / refused | n/a | 29 / 21 / 0 |
 
 - **What the check caught:** the 21 fixes were mostly detail dropped without a word (20 Jev flags, such as "Pastor Dan leads Saturday night" or "the packing list went out November 3"). The other 4 were Z3 proofs that a must-keep fact was no longer guaranteed. Each Z3 finding came with a counterexample, for example a world the note allows where the curry was tested 3 times. Every fix was accepted on the second try; nothing had to be refused.
-- **What got past it:** in one checked chain, "the packing list went out to parents on November 3" was dropped at rewrite 7. The fix was accepted because Jev compares each rewrite with the *last trusted* note, and the loss slipped by one step at a time. It isn't a must-keep fact, so Z3 never saw it. This is the judgement layer's limit in practice. Comparing each rewrite with the original note as well would close it.
-- **A gap found by reading the notes:** both arms dropped the dates on open questions ("(2026-11-01) Does the church kitchen…" became "Second rice cooker at the church kitchen?"). The hook flags a re-dated question but not a dropped date, so the next chat loses when each question was raised.
+- **What got past it, at first:** in one checked chain, "the packing list went out to parents on November 3" was dropped at rewrite 7. The check compared each rewrite only with the *last trusted* note, so the loss got through one step at a time; it isn't a must-keep fact, so Z3 never saw it. Both arms also dropped the dates on open questions ("(2026-11-01) Does the church kitchen…" became "Second rice cooker at the church kitchen?"), and nothing flagged that.
+
+**Both gaps closed, then the checked chains re-run** (same note, same writer, 5 chains, 10 rewrites):
+- **Dropped dates:** code now flags an open question that loses the date it was raised.
+- **Slow loss:** the check keeps the last 5 trusted versions and asks about any standing fact that is missing from both the last note and the new one, against the oldest of them. This older-version check is advisory: it asks once and never refuses. On real notes it fired on 3 extra wrap-ups in 31 (work finished elsewhere, a project cut down), so a refusal would cost too much.
+
+| Checked chains | Before the fixes | After |
+|---|---|---|
+| Final note flagged against the original | 1 of 5 | **0 of 5** |
+| Lost a must-keep fact (Z3) | 0 of 5 | 0 of 5 |
+| Open-question dates kept in the final note | lost in all 5 | **kept in all 5** |
+| Rewrites passed / fixed / refused | 29 / 21 / 0 | 27 / 22 / 1 |
+
+On first tries, the older-version check raised 21 flags and the dropped-date check 3. The one refusal kept the last trusted note, as designed.
 
 **From November 6 (budget note, Opus 5.5, 20 rewrites, 10 runs each):** without the check, the note drifted in 10 of 10 runs. With the check, it ended clean in 10 of 10, after 40 fixes and 0 refusals. The drift seen: a promise grew an "if", a weekend was made up, a fact became a doubt, and a number went wrong.
 
@@ -115,6 +127,8 @@ A false alarm costs one rewrite. Writing a fact list for real projects, so Z3 ca
   - make the judgement layer a proof. Jev is a strong measured check (41 of 47 alone, 0 false alarms here), not a guarantee.
   - cover real projects formally yet, since that needs a fact list per project.
   - cover a crash in the hook itself (Node missing, a bug). That lets the write through, so Claude never gets stuck.
+  - cover the older-version check. It is advisory: it asks once and never refuses, so it sits outside the proved guarantee.
+  - make Jev's deleted-fact check steady. One deleted fact scores right at its cut-off and flips from run to run. Z3 catches that case with a proof every time.
 
 ## Cost
 

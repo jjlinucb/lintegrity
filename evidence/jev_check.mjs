@@ -11,10 +11,10 @@ const { findChanges, buildQuestions, stateFor, decide, MODEL } = await import(jo
 const { ask, loadKey } = await import(join(DIR, "../../lib/jev.mjs"));
 const { loadTerms } = await import(join(DIR, "../../lib/gate.mjs"));
 
-const { before, after, record = "" } = JSON.parse(readFileSync(0, "utf8"));
-const found = findChanges(before, after);
+const { before, after, record = "", anchor = null } = JSON.parse(readFileSync(0, "utf8"));
+const found = findChanges(before, after, anchor);
 let problems = [];
-if (found.changed.length || found.removed.length || found.dropped.length || found.status) {
+if (found.changed.length || found.removed.length || found.lostSinceAnchor.length || found.dropped.length || found.status) {
   for (let i = 0; i < 3; i++) {
     try {
       const r = await ask(loadKey(), { model: MODEL, state: stateFor(before, after, found, record), questions: buildQuestions(found, { record: !!record }), budgetMs: 20000, terms: loadTerms() });
