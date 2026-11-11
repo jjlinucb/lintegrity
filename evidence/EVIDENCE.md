@@ -10,7 +10,7 @@ November 10, 2026. The plan was written before the tests ran: [TEST-PLAN.md](TES
 - **Measured, not proved:** the judgement layer (Jev) covers what logic can't express, like made-up worries, made-up decisions, status changes and open questions. Both layers together caught 47 of 47 planted drifts, with 0 false alarms on 21 safe edits (4 of them true arithmetic statements).
 - **Two honest limits:**
   - **The proof is only as good as the translation into logic.** One case slipped through until a third reading was added to break ties between the two translations.
-  - **The proof covers Lintegrity's gate, not the Claude Code hook as built today.** The hook trades the guarantee for convenience, and Z3 shows exactly how (below).
+  - **The proof covers the design, not the checker's accuracy.** It assumes the checker flags every drifted note it judges; section 1 measures how close it comes.
 
 ## 1. The test suite: 68 cases in 6 tiers
 
@@ -65,7 +65,8 @@ The invariant is "the trusted note is clean". Z3 checks whether any turn can bre
 | Design | Result |
 |---|---|
 | Lintegrity's gate: one fix, then refuse; a checker error counts as a flag | **Proved.** No path lets a drifted note become trusted, on any turn. |
-| The Claude Code hook as built | **Leak, 3 ways in:** Jev errors or times out (the hook fails open), Claude writes the same note a second time (the hook never blocks twice in a row), or both. |
+| The Claude Code hook before November 10 | **Leak, 3 ways in:** Jev errors or times out (the hook failed open), Claude writes the same note a second time (it never blocked twice in a row), or both. |
+| The Claude Code hook since November 10, rebuilt as the gate: it checks before the write lands, denies once, then refuses, and treats an error as a flag | **Proved**, except for one way in: the user saying "accept the note" in the chat. That's the user's own call, not drift. |
 
 The proof's one assumption is that the checker flags every drifted note it judges. Section 1 measures how close the real checker comes. So the guarantee is: **every drift the checker can see is kept out of the next chat, on every turn, with no exceptions in the plumbing.**
 
@@ -113,7 +114,7 @@ A false alarm costs one rewrite. Writing a fact list for real projects, so Z3 ca
   - prove the translation into logic is right. Two independent readings plus a tie-break are the safeguard; one of 47 drifts needed the tie-break.
   - make the judgement layer a proof. Jev is a strong measured check (41 of 47 alone, 0 false alarms here), not a guarantee.
   - cover real projects formally yet, since that needs a fact list per project.
-  - mean today's hook guarantees anything. It fails open by design.
+  - cover a crash in the hook itself (Node missing, a bug). That lets the write through, so Claude never gets stuck.
 
 ## Cost
 

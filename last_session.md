@@ -17,8 +17,8 @@ On 2026-11-10 the hook learned to read the chat's own transcript, to catch a mad
 On 2026-11-10 a planned evidence run (`evidence/`, write-up in `evidence/EVIDENCE.md`) put both layers through 68 cases in six tiers, rewrite chains, and a new handoff pipe proof. Both layers: 47 of 47 drifts caught, 0 false alarms on 21 safe edits. Z3 caught 31 of 31 formal drifts, with no false alarm. Haiku chains lost a must-keep fact in 2 of 5 plain chains and 0 of 5 checked. The new `lintegrity/note_check.py` is the general Z3 fact check (two translations plus a tie-break reading).
 
 ## Pick up here
-Three gaps the evidence run found, smallest first:
-1. The session-check hook (TYPESAFE) fails open: a Jev error, or a second write, lets a flagged note through. `handoff_pipe_proof.py` proves the gate design has no such leak. Whether the hook should refuse instead is the owner's call, since it would block more.
+Gaps the evidence run found:
+1. Done 2026-11-10: the session-check hook was rebuilt as the gate (PreToolUse; deny once, then refuse; an error counts as a flag; the user overrides with "accept the note"). `handoff_pipe_proof.py` proves it leak-free apart from that override.
 2. Chains drop the dates on open questions; the hook flags re-dated questions but not dropped dates.
 3. Jev compares each rewrite only with the last trusted note, so a detail can slip out one step at a time (the packing-list case). Also compare with the original, or the note from N rounds back.
 
