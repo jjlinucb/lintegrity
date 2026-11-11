@@ -155,7 +155,14 @@ if use_claude:
                   "plain English, no working shown.")
     json.dump({"real": real}, open(f"{__file__}.answer.json", "w"))
 else:
-    real = json.load(open(f"{__file__}.answer.json"))["real"]
+    try:
+        real = json.load(open(f"{__file__}.answer.json"))["real"]
+    except FileNotFoundError:
+        # A fresh checkout has no saved answer or translations: Part A (the pipe proof) still ran.
+        print("\nPart B skipped: --no-claude needs a saved answer, and there is none yet. "
+              "Run once without --no-claude (it calls `claude -p`) to save one.")
+        json.dump(results, open(f"{__file__}.results.json", "w"), indent=1)
+        sys.exit(0)
 check_answer("Claude's real answer", real, use_claude)
 check_answer("planted drift", PLANTED, use_claude)
 json.dump(results, open(f"{__file__}.results.json", "w"), indent=1)

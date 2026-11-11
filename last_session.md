@@ -1,7 +1,7 @@
 # Last Session
 
 **Updated:** 2026-11-10
-**Status:** active
+**Status:** dormant
 
 ## Where things stand
 Lintegrity checks an AI's handoff notes before the next chat reads them. Z3 proves the numbers, a must-keep list (with background rules) catches dropped facts, and Sonnet 5.5 reads the note's own sentences against the original and the last note, flagging changes in meaning only. A pipe proof shows that no made-up claim reaches the screen or memory.
@@ -16,15 +16,19 @@ On 2026-11-10 the hook learned to read the chat's own transcript, to catch a mad
 
 On 2026-11-10 a planned evidence run (`evidence/`, write-up in `evidence/EVIDENCE.md`) put both layers through 68 cases in six tiers, rewrite chains, and a new handoff pipe proof. Both layers: 47 of 47 drifts caught, 0 false alarms on 21 safe edits. Z3 caught 31 of 31 formal drifts, with no false alarm. Haiku chains lost a must-keep fact in 2 of 5 plain chains and 0 of 5 checked. The new `lintegrity/note_check.py` is the general Z3 fact check (two translations plus a tie-break reading).
 
+Also on 2026-11-10: `claim_and_pipe_check.py --no-claude` now skips Part B with a message on a fresh checkout instead of crashing, and `evidence/EVIDENCE.md` lists the pinned model and tool versions the results hold for.
+
 ## Pick up here
+Paused on 2026-11-10 by the owner's call: not much more work is planned, there's no rollout to an app for now (the assistant app that was the first candidate may itself be retired), and the owner wants to see how Lintegrity fits into their own workflow before building more. The session-check hook keeps running on every last_session.md write in the meantime, so daily use is the test.
+
 Gaps the evidence run found:
 1. Done 2026-11-10: the session-check hook was rebuilt as the gate (PreToolUse; deny once, then refuse; an error counts as a flag; the user overrides with "accept the note"). `handoff_pipe_proof.py` proves it leak-free apart from that override.
 2. Done 2026-11-10: a dropped question date is flagged by code.
 3. Done 2026-11-10: the hook keeps the last 5 trusted versions and asks about standing facts lost since the oldest (advisory: asks once, never refuses). Re-run checked Haiku chains: 5 of 5 final notes clean against the original (1 of 5 before), dates kept in all 5.
 
-Earlier plan, still open: Make the check notice when the same drift keeps coming back (the weekend question returned 11 times in a row in two runs), and report "the source note is unclear here" instead of fixing it every round. Then test on a longer, messier note (dates, people, several projects), and turn the checker into a small library: `check(note, facts, must_keep, last_note)`.
+If work picks up again: make the check notice when the same drift keeps coming back (the weekend question returned 11 times in a row in two runs) and report "the source note is unclear here" instead of fixing it every round; give one real project a fact list so Z3 runs on its notes too; and turn the checker into a small library: `check(note, facts, must_keep, last_note)`.
 
 Use cases are listed in `USE-CASES.md`. The first candidates in John's own apps are kept outside this public repo, in the vault ideas list (item 14).
 
 ## Open questions
-- (2026-11-05) Which real app gets Lintegrity first: an assistant's morning summary and memory, or an AI spending cap? Waiting, by choice (2026-11-06).
+- (2026-11-05) Which real app gets Lintegrity first: an assistant's morning summary and memory, or an AI spending cap? Not the assistant app for now (2026-11-10); waiting to see how it fits the owner's own workflow.

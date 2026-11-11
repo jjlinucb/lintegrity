@@ -130,6 +130,18 @@ A false alarm costs one rewrite. Writing a fact list for real projects, so Z3 ca
   - cover the older-version check. It is advisory: it asks once and never refuses, so it sits outside the proved guarantee.
   - make Jev's deleted-fact check steady. One deleted fact scores right at its cut-off and flips from run to run. Z3 catches that case with a proof every time.
 
+## Models and versions
+
+These results hold for these versions. Re-run the suite (below) whenever one changes, since Jev's cut-offs were tuned against its pinned version.
+
+| Role | Model or tool |
+|---|---|
+| Judgement layer (session-check hook) | Jev `jev-1.13.0`, pinned in `check.mjs` (`PINNED_MODEL`) |
+| Translation into logic (two readings plus a tie-break) | `claude-sonnet-5-5` (`LINTEGRITY_TRANSLATE_MODEL`) |
+| Writer in the rewrite chains | `claude-sonnet-5-5` (short note), `claude-haiku-5-5` (long note) |
+| Solver | Z3 5.4.0 |
+| Runtimes | Node v20.12.2, Python 3.9 |
+
 ## Cost
 
 - **Jev:** 66 checks, 134,682 input tokens (about $0.006 in all), median 144 ms each.
